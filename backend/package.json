@@ -1,14 +1,19 @@
 {
-  "name": "backend",
-  "version": "1.0.0",
-  "main": "src/app.js",
-  "scripts": {
-    "dev": "nodemon src/app.js"
-  },
-  "author": "",
-  "license": "ISC",
-  "description": "",
-  "devDependencies": {
-    "nodemon": "^3.1.10"
-  }
+	"name": "backend",
+	"version": "1.0.0",
+	"main": "src/app.js",
+	"type": "module",
+	"scripts": {
+		"dev": "nodemon src/app.js"
+	},
+	"author": "",
+	"license": "ISC",
+	"description": "",
+	"devDependencies": {
+		"nodemon": "^3.1.10"
+	},
+	"dependencies": {
+		"better-sqlite3": "^12.2.0",
+		"sqlite-vec": "^0.1.7-alpha.2"
+	}
 }
