@@ -26,6 +26,7 @@ db.exec(`
 		title TEXT NOT NULL,
 		created_date TEXT NOT NULL,
 		accessed_at TEXT NOT NULL,
+		favorite INTEGER not NULL DEFAULT 0,
 		content TEXT,
 		embedding FLOAT[512]
 	);
@@ -113,6 +114,7 @@ app.get("/api/memos", (req, res) => {
 				title,
 				accessed_at,
 				created_date,
+				favorite,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
 		`;
@@ -172,7 +174,7 @@ app.patch ("/api/memos/:id", async(req, res) => {
 		const params = {};
 
 		// リクエスト箇所のみSQL文に追加
-		const fields = ["title", "content", "created_date"];
+		const fields = ["title", "content", "created_date", "favorite"];
 		fields.forEach(field => {
 			if(req.body[field] !== undefined) { // 空文字もOKにする
 				updates.push(`${field} = :${field}`);
@@ -227,13 +229,23 @@ app.delete("/api/memos/:id", (req, res) => {
 // 検索
 app.get("/api/search", (req, res) => {
 	try {
-		const { searchWord } = req.query;
-		if (!searchWord) return res.status(400).json({ error: "Search query 'searchWord' is required." })
+		const { q, favorite } = req.query;
 
-		let kw = searchWord.replace(/[%_]/g, "\\$&") // %,_にバックスラッシュを1つくっつける
-		kw = `%${kw}%` // 曖昧検索のために前後に%をつける
+		if (!q && !favorite) return res.status(400).json({ error: "Search query 'q' or 'favorite' is required." })
 
-		if (!searchWord) return res.status(400).json({ error: "Search query 'q' is required." })
+		const conditions = [];
+		const params = { previewWords };
+
+		if (q) {
+			let kw = q.replace(/[%_]/g, "\\$&") // %,_にバックスラッシュを1つくっつける
+			kw = `%${kw}%` // 曖昧検索のために前後に%をつける
+			params.kw = kw;
+			conditions.push(`(title LIKE :kw ESCAPE '\\' OR content LIKE :kw ESCAPE '\\')`);
+		}
+
+		if (favorite) {
+			conditions.push(`favorite = 1`);
+		}
 
 		const rows = db.prepare(`
 			SELECT
@@ -241,11 +253,10 @@ app.get("/api/search", (req, res) => {
 				title,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
-			WHERE title LIKE :kw
-				OR content LIKE :kw
+			WHERE ${conditions.join(" AND ")}
 			ORDER BY created_date DESC, id DESC -- 適当、将来的に関連度順に
 			LIMIT 10
-		`).all({ previewWords, kw });
+		`).all(params);
 
 		res.json(rows);
 	} catch (e) {
@@ -282,6 +293,7 @@ app.get("/api/graph", (req, res) => {
 				id,
 				title,
 				created_date,
+				favorite,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
 			WHERE id IN (${idsArray.join(",")})
