@@ -16,6 +16,26 @@ const ZERO_EMBED = JSON.stringify(Array(512).fill(0));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+// ===== CORS (Render Frontendを許可) =====
+const allowedOrigins = [
+  "https://twogate-devcamp-st-2025-1.onrender.com", // ← フロントのURL
+  "http://localhost:3001",                           // ← ローカル確認用（任意）
+];
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      // SSRやcurl等でoriginが無いケースも通す
+      if (!origin || allowedOrigins.includes(origin)) return cb(null, true);
+      return cb(new Error("Not allowed by CORS"));
+    },
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: false, // 認証クッキー等を使わないならfalseでOK
+  })
+);
+// Preflight（OPTIONS）も許可
+app.options("*", cors());
+
 // db
 const db = new Database("./data/app.db"); // backendからみて
 sqliteVec.load(db);
