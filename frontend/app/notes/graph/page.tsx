@@ -13,11 +13,15 @@ export default function GraphPage() {
   const notes = useQuery({ queryKey: ["memos"], queryFn: () => repo.list() });
 
   useEffect(()=> {
-    if (!notes.data) return;
+    if (!notes.data || !graph.data) return;
     if (!search) { setGraphResults([]); return; }
     const q = search.toLowerCase();
-    setGraphResults(notes.data.filter(n => n.title.toLowerCase().includes(q)));
-  }, [notes.data, search, setGraphResults]);
+    // Graph上に存在するノードだけを対象に
+    const nodeIdSet = new Set(graph.data.nodes.map(n => n.id));
+    setGraphResults(
+      notes.data.filter(n => nodeIdSet.has(n.id) && n.title.toLowerCase().includes(q))
+    );
+  }, [notes.data, graph.data, search, setGraphResults]);
 
   useEffect(()=> {
     if (focusNoteId != null) {
@@ -25,6 +29,10 @@ export default function GraphPage() {
     }
   }, [focusNoteId]);
 
+  // 全ノート情報をwindowにセット（GraphCanvasで参照用）
+  if (typeof window !== "undefined" && notes.data) {
+    (window as any).__ALL_NOTES__ = notes.data;
+  }
   return (
     <div style={{ height: "100%", display: "grid", gridTemplateRows: "28px 1fr", gap: 8, padding: 12 }}>
       <div style={{ color: "#6b7280", fontSize: 12 }}>リンクビュー（Graph）</div>

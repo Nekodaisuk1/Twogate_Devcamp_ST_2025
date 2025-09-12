@@ -1,6 +1,8 @@
 "use client";
 import React, { useEffect, useMemo, useRef } from "react";
 import * as d3 from "d3";
+import { formatJP } from "@/lib/date";
+import type { Note } from "@/lib/types";
 import type { GraphPayload } from "@/lib/types";
 import { useUiStore } from "@/lib/stores/useUiStore";
 import { useRouter } from "next/navigation";
@@ -26,7 +28,8 @@ export default function GraphCanvas({
   const transformRef = useRef(d3.zoomIdentity);
   const simRef = useRef<d3.Simulation<any, any> | null>(null);
 
-  const { graphResults, focusNoteId, setFocus } = useUiStore();
+  const { graphResults, focusNoteId, setFocus, datePref } = useUiStore();
+  const snapNodeIdRef = useRef<number|null>(null);
   const router = useRouter();
 
   // d3 が書き換えるためコピーを作る
@@ -35,11 +38,74 @@ export default function GraphCanvas({
       (data as any).edges ??
       (data as any).links?.map((l: any) => ({ source: l.source, target: l.target, score: l.value })) ??
       [];
+
+    // 連結成分ごとにグループ分け
+  // x, y プロパティを持つ型で初期化
+  const nodeMap = new Map(data.nodes.map(n => [n.id, { ...n, x: undefined as number|undefined, y: undefined as number|undefined }]));
+    const visited = new Set();
+    const groups: number[][] = [];
+    function dfs(id: number, group: number[]) {
+      if (visited.has(id)) return;
+      visited.add(id);
+      group.push(id);
+      for (const e of edges) {
+        if (e.source === id && !visited.has(e.target)) dfs(e.target as number, group);
+        if (e.target === id && !visited.has(e.source)) dfs(e.source as number, group);
+      }
+    }
+    for (const n of data.nodes) {
+      if (!visited.has(n.id)) {
+        const group: number[] = [];
+        dfs(n.id, group);
+        groups.push(group);
+      }
+    }
+
+    // グループごとに中心をずらし、グループ内は円形に配置
+    const R = 200; // グループ間距離
+    const r = 40;  // グループ内半径
+    groups.forEach((group, gi) => {
+      const angle0 = (2 * Math.PI * gi) / groups.length;
+      const cx = Math.cos(angle0) * R;
+      const cy = Math.sin(angle0) * R;
+      group.forEach((id, j) => {
+        const theta = (2 * Math.PI * j) / group.length;
+        const x = cx + Math.cos(theta) * r;
+        const y = cy + Math.sin(theta) * r;
+        const node = nodeMap.get(id);
+        if (node) {
+          node.x = x;
+          node.y = y;
+        }
+      });
+    });
+
     return {
-      nodes: data.nodes.map((n) => ({ ...n })),
+      nodes: Array.from(nodeMap.values()),
       links: edges.map((e: any) => ({ ...e })),
     };
   }, [data]);
+
+  // ノードID→Note情報のマップ（title, preview, date など）
+  // 全ノート情報を取得（window経由でGraphPageから受け取る）
+  const allNotes = (typeof window !== "undefined" && (window as any).__ALL_NOTES__) as Note[] | undefined;
+  const noteMap = useMemo(() => {
+    const map = new Map<number, Partial<Note>>();
+    nodes.forEach(n => {
+      map.set(n.id, { id: n.id, title: n.title });
+    });
+    // graphResultsで補完
+    graphResults.forEach(n => {
+      map.set(n.id, { ...map.get(n.id), ...n });
+    });
+    // allNotesでさらに詳細を補完
+    if (allNotes) {
+      allNotes.forEach(n => {
+        if (map.has(n.id)) map.set(n.id, { ...map.get(n.id), ...n });
+      });
+    }
+    return map;
+  }, [nodes, graphResults, allNotes]);
 
   // 検索ハイライト集合
   const searchSet = useMemo(() => new Set(graphResults.map((n) => n.id)), [graphResults]);
@@ -66,10 +132,11 @@ export default function GraphCanvas({
   useEffect(() => {
     const sim = d3
       .forceSimulation(nodes as any)
-      .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(90).strength(0.2))
-      .force("charge", d3.forceManyBody().strength(-220))
+      .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(150).strength(0.4))
+      .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(0, 0))
-      .alpha(1);
+      .alpha(1)
+      .alphaDecay(0.1); // 早めに安定化
 
     sim.on("tick", draw);
     simRef.current = sim;
@@ -83,7 +150,7 @@ export default function GraphCanvas({
     };
     // 依存はIDセットのみに（座標変化で無限再作成を避ける）
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [JSON.stringify(nodes.map((n) => n.id)), JSON.stringify(links.map((l: any) => [l.source, l.target]))]);
+  }, [nodes, links]);
 
   // ズーム/パン
   useEffect(() => {
@@ -177,34 +244,33 @@ export default function GraphCanvas({
     }
 
     function onClick(ev: MouseEvent) {
-      const rect = canvas.getBoundingClientRect();
-      const n = pick(ev.clientX - rect.left, ev.clientY - rect.top);
-      if (!n) return;
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        // 編集画面へ遷移（from=graph付き）
-        router.push(`/notes/${n.id}?from=graph`);
-      }, 180);
+  const rect = canvas.getBoundingClientRect();
+  const n = pick(ev.clientX - rect.left, ev.clientY - rect.top);
+  if (!n) return;
+  // クリック直後にノートを開く（ダブルクリック判定不要）
+  router.push(`/notes/${n.id}?from=graph`);
     }
 
-    function onDblClick(ev: MouseEvent) {
-      if (timer) {
-        clearTimeout(timer);
-        timer = null;
-      }
-      const rect = canvas.getBoundingClientRect();
-      const n = pick(ev.clientX - rect.left, ev.clientY - rect.top);
-      if (!n) return;
-      n.fx = null;
-      n.fy = null;
-      simRef.current?.alpha(0.6).restart();
-    }
+
+  // ダブルクリック時のノード固定解除機能は無効化
+  // function onDblClick(ev: MouseEvent) {
+  //   if (timer) {
+  //     clearTimeout(timer);
+  //     timer = null;
+  //   }
+  //   const rect = canvas.getBoundingClientRect();
+  //   const n = pick(ev.clientX - rect.left, ev.clientY - rect.top);
+  //   if (!n) return;
+  //   n.fx = null;
+  //   n.fy = null;
+  //   simRef.current?.alpha(0.6).restart();
+  // }
 
     canvas.addEventListener("click", onClick);
-    canvas.addEventListener("dblclick", onDblClick);
+    // canvas.addEventListener("dblclick", onDblClick); // 無効化
     return () => {
       canvas.removeEventListener("click", onClick);
-      canvas.removeEventListener("dblclick", onDblClick);
+      // canvas.removeEventListener("dblclick", onDblClick); // 無効化
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nodes]);
@@ -225,19 +291,33 @@ export default function GraphCanvas({
     const tx = w / 2 - (n.x ?? 0) * k;
     const ty = h / 2 - (n.y ?? 0) * k;
     const t = d3.zoomIdentity.translate(tx, ty).scale(k);
+    d3.select(canvas)
+      .transition()
+      .duration(450)
+      .call((d3.zoom() as any).transform, t)
+      .on('end', function() {
+        // transition完了時にtransformを取得し、反映して再描画
+        // @ts-ignore
+        const tr = d3.zoomTransform(canvas);
+        transformRef.current = tr;
+        draw();
+      });
 
-    const sel = d3.select(canvas);
-    (sel as any).transition().duration(450).call((d3.zoom() as any).transform, t);
-
+    // サイドバーからのスナップ時は一度全ノードのfx,fyを解除し、対象ノードのみ一時固定→解除
     if (!opts?.centerOnly) {
+      (nodes as any[]).forEach(m => { m.fx = null; m.fy = null; });
       (n as any).fx = n.x;
       (n as any).fy = n.y;
+      snapNodeIdRef.current = id;
       simRef.current?.alpha(0.5).restart();
       setTimeout(() => {
         (n as any).fx = null;
         (n as any).fy = null;
+        snapNodeIdRef.current = null;
+        draw(); // 解除後にも再描画
       }, 800);
     }
+    draw(); // スナップ直後にも再描画
   }
 
   function draw() {
@@ -268,28 +348,60 @@ export default function GraphCanvas({
 
     // nodes
     (nodes as any[]).forEach((n) => {
-      const isFocus = focusNoteId === n.id;
       const isSearch = searchSet.has(n.id);
-
-      // halo
-      if (isFocus || isSearch) {
-        ctx.beginPath();
-        ctx.arc(n.x ?? 0, n.y ?? 0, 15, 0, Math.PI * 2);
-        ctx.fillStyle = isFocus ? "rgba(37,99,235,0.22)" : "rgba(16,185,129,0.20)";
-        ctx.fill();
-      }
-
-      // circle
+      const isSnap = snapNodeIdRef.current === n.id;
+      const note = noteMap.get(n.id) as Note | undefined;
+      // NoteCard風デザイン
+      const w = 140, h = 60, r = 10, pad = 8;
+      const x = n.x ?? 0, y = n.y ?? 0;
+      // 背景
+      ctx.save();
       ctx.beginPath();
-      ctx.arc(n.x ?? 0, n.y ?? 0, 8, 0, Math.PI * 2);
-      ctx.fillStyle = isFocus ? "#2563eb" : isSearch ? "#10b981" : "#111827";
+      ctx.moveTo(x - w/2 + r, y - h/2);
+      ctx.lineTo(x + w/2 - r, y - h/2);
+      ctx.quadraticCurveTo(x + w/2, y - h/2, x + w/2, y - h/2 + r);
+      ctx.lineTo(x + w/2, y + h/2 - r);
+      ctx.quadraticCurveTo(x + w/2, y + h/2, x + w/2 - r, y + h/2);
+      ctx.lineTo(x - w/2 + r, y + h/2);
+      ctx.quadraticCurveTo(x - w/2, y + h/2, x - w/2, y + h/2 - r);
+      ctx.lineTo(x - w/2, y - h/2 + r);
+      ctx.quadraticCurveTo(x - w/2, y - h/2, x - w/2 + r, y - h/2);
+      ctx.closePath();
+      ctx.fillStyle = isSnap ? "#f3e8ff" : isSearch ? "#d1fae5" : "#fff";
+      ctx.strokeStyle = isSnap ? "#a855f7" : isSearch ? "#10b981" : "#e5e5e5";
+      ctx.lineWidth = 2;
+      ctx.shadowColor = "#0002";
+      ctx.shadowBlur = 2;
       ctx.fill();
-
-      // label
-      ctx.font = "12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif";
-      ctx.textBaseline = "middle";
-      ctx.fillStyle = "#111827";
-      ctx.fillText(n.title ?? String(n.id), (n.x ?? 0) + 12, (n.y ?? 0));
+      ctx.shadowBlur = 0;
+      ctx.stroke();
+      // テキストを省略せず、はみ出た分は…で省略
+      function drawEllipsisText(text: string, font: string, color: string, tx: number, ty: number, maxWidth: number) {
+        ctx.save();
+        ctx.font = font;
+        ctx.fillStyle = color;
+        ctx.textBaseline = "top";
+        let display = text;
+        if (ctx.measureText(text).width > maxWidth) {
+          while (display.length > 0 && ctx.measureText(display + "…").width > maxWidth) {
+            display = display.slice(0, -1);
+          }
+          display = display + "…";
+        }
+        ctx.fillText(display, tx, ty);
+        ctx.restore();
+      }
+      // タイトル
+      drawEllipsisText(note?.title ?? String(n.id), "bold 14px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif", "#111827", x - w/2 + pad, y - h/2 + pad, w - pad*2);
+      // 日付
+      const dateISO = datePref === "updated" ? note?.accessed_at : note?.created_date;
+      const label = datePref === "updated" ? "更新" : "作成";
+      drawEllipsisText(`${label}: ${formatJP(dateISO)}`, "12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif", "#6b7280", x - w/2 + pad, y - h/2 + 28, w - pad*2);
+      // プレビュー
+      if (note?.preview) {
+        drawEllipsisText(note.preview, "12px -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif", "#374151", x - w/2 + pad, y - h/2 + 44, w - pad*2);
+      }
+      ctx.restore();
     });
 
     ctx.restore();
