@@ -126,8 +126,24 @@ app.get("/api/memos", (req, res) => {
 	}
 });
 
-// 類似メモ取得、memo_similarities tableから
+// 1つのメモの全情報取得
 app.get("/api/memos/:id/", (req, res) => {
+	const id = Number(req.params.id);
+	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "bad id" });
+	try {
+		const row = db.prepare(`
+			SELECT id, title, content, accessed_at, created_date
+			FROM memos WHERE id = ?
+		`).get(id);
+		if (!row) return res.status(404).json({ error: "not found" });
+		res.json({ note: row });
+	} catch (e) {
+		res.status(500).json({ error: "failed to fetch memo" });
+	}
+});
+
+// 類似メモ取得、memo_similarities tableから
+app.get("/api/memos/:id/similar", (req, res) => {
 	const id = Number(req.params.id);
 	const sql = `
 		SELECT 

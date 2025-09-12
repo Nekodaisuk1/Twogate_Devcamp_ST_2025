@@ -1,0 +1,5 @@
+{
+  "/notes/grid/page": "app/notes/grid/page.js",
+  "/notes/[id]/page": "app/notes/[id]/page.js",
+  "/notes/graph/page": "app/notes/graph/page.js"
+}
