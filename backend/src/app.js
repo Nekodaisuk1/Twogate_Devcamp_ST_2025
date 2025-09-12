@@ -35,7 +35,9 @@ app.use(
   })
 );
 // Preflight（OPTIONS）も許可
-app.options("*", cors());
+ app.use(
+   cors({ /* 省略 */ })
+ );
 
 // db
 const db = new Database("./data/app.db"); // backendからみて
