@@ -1,3 +1,4 @@
 # node.js
 /backend/node_modules/
 /backend/data/app.db
+/frontend/node_modules/

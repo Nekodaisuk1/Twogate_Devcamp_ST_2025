@@ -26,7 +26,6 @@ db.exec(`
 		title TEXT NOT NULL,
 		created_date TEXT NOT NULL,
 		accessed_at TEXT NOT NULL,
-		favorite INTEGER not NULL,
 		content TEXT,
 		embedding FLOAT[512]
 	);
@@ -114,7 +113,6 @@ app.get("/api/memos", (req, res) => {
 				title,
 				accessed_at,
 				created_date,
-				favorite,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
 		`;
@@ -126,7 +124,8 @@ app.get("/api/memos", (req, res) => {
 	}
 });
 
-// 1つのメモの全情報取得
+// 類似メモ取得、memo_similarities tableから
+// 単一メモ取得（id, title, content, ...）
 app.get("/api/memos/:id/", (req, res) => {
 	const id = Number(req.params.id);
 	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "bad id" });
@@ -142,22 +141,6 @@ app.get("/api/memos/:id/", (req, res) => {
 	}
 });
 
-// 類似メモ取得、memo_similarities tableから
-app.get("/api/memos/:id/similar", (req, res) => {
-	const id = Number(req.params.id);
-	const sql = `
-		SELECT 
-		  CASE WHEN memo_id_1 = :id THEN memo_id_2 ELSE memo_id_1 END AS similarity_memo_ids,
-		  similarity_score
-		FROM memo_similarities
-		WHERE memo_id_1 = :id OR memo_id_2 = :id
-		ORDER BY similarity_score DESC -- 降順
-	`;
-
-	const rows = db.prepare(sql).all({ id })
-	res.json(rows);
-})
-
 // メモ作成
 // 性能をあげたくなったらメモを段落ごとに分割するようにする
 app.post("/api/memos", async (req, res) => {
@@ -171,9 +154,9 @@ app.post("/api/memos", async (req, res) => {
 	// embeddingをnullにはできないため、初期化しておく
 	const info = db.prepare(`
 		INSERT 
-			INTO memos (title, content, created_date, accessed_at, favorite, embedding) 
-			VALUES (?, ?, ?, ?, CAST(? AS INTEGER), ?)
-	`).run(title, content, created_date ?? jstDate(), now, 0, ZERO_EMBED);
+			INTO memos (title, content, created_date, accessed_at, embedding) 
+			VALUES (?, ?, ?, ?, ?)
+	`).run(title, content, created_date ?? jstDate(), now, ZERO_EMBED);
 
 	const id = Number(info.lastInsertRowid);
 	await calcSimilarities(id, content);
@@ -190,13 +173,9 @@ app.patch ("/api/memos/:id", async(req, res) => {
 		const params = {};
 
 		// リクエスト箇所のみSQL文に追加
-		const fields = ["title", "content", "created_date", "favorite"];
+		const fields = ["title", "content", "created_date"];
 		fields.forEach(field => {
-			if (field === "favorite") {
-				// なぜか整数でも整数にならないので明示的に
-				updates.push(`favorite = CAST(:favorite AS INTEGER)`);
-				params.favorite = req.body.favorite;
-			} else {
+			if(req.body[field] !== undefined) { // 空文字もOKにする
 				updates.push(`${field} = :${field}`);
 				params[field] = req.body[field];
 			}
@@ -249,23 +228,13 @@ app.delete("/api/memos/:id", (req, res) => {
 // 検索
 app.get("/api/search", (req, res) => {
 	try {
-		const { q, favorite } = req.query;
+		const { searchWord } = req.query;
+		if (!searchWord) return res.status(400).json({ error: "Search query 'searchWord' is required." })
 
-		if (!q && !favorite) return res.status(400).json({ error: "Search query 'q' or 'favorite' is required." })
+		let kw = searchWord.replace(/[%_]/g, "\\$&") // %,_にバックスラッシュを1つくっつける
+		kw = `%${kw}%` // 曖昧検索のために前後に%をつける
 
-		const conditions = [];
-		const params = { previewWords };
-
-		if (q) {
-			let kw = q.replace(/[%_]/g, "\\$&") // %,_にバックスラッシュを1つくっつける
-			kw = `%${kw}%` // 曖昧検索のために前後に%をつける
-			params.kw = kw;
-			conditions.push(`(title LIKE :kw ESCAPE '\\' OR content LIKE :kw ESCAPE '\\')`);
-		}
-
-		if (favorite) {
-			conditions.push(`favorite = 1`);
-		}
+		if (!searchWord) return res.status(400).json({ error: "Search query 'q' is required." })
 
 		const rows = db.prepare(`
 			SELECT
@@ -273,10 +242,11 @@ app.get("/api/search", (req, res) => {
 				title,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
-			WHERE ${conditions.join(" AND ")}
+			WHERE title LIKE :kw
+				OR content LIKE :kw
 			ORDER BY created_date DESC, id DESC -- 適当、将来的に関連度順に
 			LIMIT 10
-		`).all(params);
+		`).all({ previewWords, kw });
 
 		res.json(rows);
 	} catch (e) {
@@ -313,7 +283,6 @@ app.get("/api/graph", (req, res) => {
 				id,
 				title,
 				created_date,
-				favorite,
 				substr(content, 1, :previewWords) AS preview
 			FROM memos
 			WHERE id IN (${idsArray.join(",")})
