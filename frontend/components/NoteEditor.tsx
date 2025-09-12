@@ -2,6 +2,7 @@
 import React, { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { repo } from "@/lib/data/NotesRepo";
+import { useUiStore } from "@/lib/stores/useUiStore";
 
 type Props = { noteId: number; onSaved?: () => void; onDeleted?: () => void; };
 
@@ -22,6 +23,11 @@ export default function NoteEditor({ noteId, onSaved, onDeleted }: Props) {
 
   const [title, setTitle]   = useState("");
   const [content, setContent] = useState("");
+  const [selectedSection, setSelectedSection] = useState<string>("");
+
+  // セクション一覧と追加アクション
+  const sections = useUiStore(s => s.sections);
+  const addItemToSection = useUiStore(s => s.addItemToSection);
 
   useEffect(() => {
     // { note, similar } 形式 or Note直返し両対応
@@ -68,6 +74,39 @@ export default function NoteEditor({ noteId, onSaved, onDeleted }: Props) {
           </button>
         </div>
       </div>
+
+      {/* セクション追加UI */}
+      {sections.length > 0 && (
+        <div style={{display:"flex", gap:8, alignItems:"center", marginBottom:8}}>
+          <select
+            value={selectedSection}
+            onChange={e => setSelectedSection(e.target.value)}
+            style={{padding:"6px 10px", borderRadius:6, border:"1px solid #e5e7eb"}}
+          >
+            <option value="">セクションを選択</option>
+            {sections.map(sec => (
+              <option key={sec.sectionId} value={sec.sectionId}>{sec.title}</option>
+            ))}
+          </select>
+          <button
+            style={{padding:"6px 12px", borderRadius:6, border:"1px solid #2563eb", background:"#2563eb", color:"#fff"}}
+            disabled={!selectedSection}
+            onClick={() => {
+              if (!selectedSection) return;
+              addItemToSection(selectedSection, {
+                id: noteId,
+                title,
+                // 必要なら日付やmetaも追加可能
+              });
+              setSelectedSection("");
+              window.alert("セクションに追加しました");
+            }}
+          >
+            セクションに追加
+          </button>
+        </div>
+      )}
+
       <textarea value={content} onChange={e=>setContent(e.target.value)} placeholder="本文を入力..." style={S.textarea}/>
     </div>
   );

@@ -1,0 +1,22 @@
+/*!*****************************************************************************************************************************************************************************************************************************************************************************!*\
+  !*** css ./node_modules/next/dist/build/webpack/loaders/css-loader/src/index.js??ruleSet[1].rules[13].oneOf[7].use[2]!./node_modules/next/dist/build/webpack/loaders/postcss-loader/src/index.js??ruleSet[1].rules[13].oneOf[7].use[3]!./components/SidebarView.module.css ***!
+  \*****************************************************************************************************************************************************************************************************************************************************************************/
+
+.SidebarView_wrap__T8AfT{display:flex;flex-direction:column;height:100%;}
+.SidebarView_header__7sqDg{padding:12px 12px 0;}
+.SidebarView_time__m1KTj{font-size:12px;color:#6b7280;margin-bottom:8px;}
+.SidebarView_sb_line__cBgBk{height:1px;background:#e5e5e5;}
+.SidebarView_nav__dCfnp{padding:8px 8px 72px;overflow:auto;height:100%;}
+.SidebarView_sectionHeader__D6ZfU{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;cursor:pointer;}
+.SidebarView_sectionHeader__D6ZfU:hover{background:#f5f5f5;}
+.SidebarView_chev__uulMs{width:14px;display:inline-block;text-align:center;color:#6b7280;}
+.SidebarView_sectionTitle__bw1WM{font-weight:600;}
+.SidebarView_count__xLqX4{margin-left:auto;color:#6b7280;font-size:12px;}
+.SidebarView_items__2yzxV{padding:4px 0 8px 22px;}
+.SidebarView_row__W_QBP{padding:6px 8px;border-radius:6px;cursor:pointer;}
+.SidebarView_row__W_QBP:hover{background:#f3f4f6;}
+.SidebarView_rowTitle__Bzr1_{font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.SidebarView_rowMeta__ab8uV{font-size:12px;color:#9ca3af;}
+.SidebarView_footer__THIwl{position:-webkit-sticky;position:sticky;bottom:0;background:#fff;border-top:1px solid #e5e5e5;padding:8px;display:flex;}
+.SidebarView_addBtn__qFJql{width:100%;}
+

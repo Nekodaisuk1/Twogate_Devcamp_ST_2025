@@ -1,3 +1,6 @@
+// サイドバーのカスタムセクション用型
+export type SidebarItem = { id: number; title: string; dateISO?: string; dateLabel?: string; meta?: string };
+export type CustomSection = { sectionId: string; title: string; items: SidebarItem[] };
 
 export type Note = {
   id: number;

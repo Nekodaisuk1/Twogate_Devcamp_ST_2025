@@ -1,4 +1,4 @@
-// File: /Users/tanna.iori/Downloads/devcamp/Twogate_Devcamp_SURANPUTAMAYURA/frontend/app/notes/[id]/page.tsx
+// File: /Users/tanna.iori/Twogate_Devcamp_2025/frontend/app/notes/[id]/page.tsx
 import * as entry from '../../../../../app/notes/[id]/page.js'
 import type { ResolvingMetadata, ResolvingViewport } from 'next/dist/lib/metadata/types/metadata-interface.js'
 

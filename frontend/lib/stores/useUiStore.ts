@@ -1,6 +1,7 @@
 
+
 import { create } from "zustand";
-import type { DatePref, Note } from "@/lib/types";
+import type { DatePref, Note, CustomSection, SidebarItem } from "@/lib/types";
 
 type State = {
   search: string;
@@ -8,6 +9,7 @@ type State = {
   graphResults: Note[];
   focusNoteId?: number;
   collapsed: Record<string, boolean>;
+  sections: CustomSection[];
 };
 
 type Actions = {
@@ -16,6 +18,9 @@ type Actions = {
   setGraphResults: (notes: Note[]) => void;
   setFocus: (id?: number) => void;
   toggleSection: (key: string) => void;
+  addSection: (title: string) => void;
+  removeSection: (sectionId: string) => void;
+  addItemToSection: (sectionId: string, item: SidebarItem) => void;
 };
 
 const initial: State = {
@@ -24,6 +29,7 @@ const initial: State = {
   graphResults: [],
   focusNoteId: undefined,
   collapsed: {},
+  sections: [],
 };
 
 export const useUiStore = create<State & Actions>((set, get) => ({
@@ -38,5 +44,19 @@ export const useUiStore = create<State & Actions>((set, get) => ({
   toggleSection: (key) => {
     const cur = get().collapsed[key];
     set({ collapsed: { ...get().collapsed, [key]: !cur } });
+  },
+  addSection: (title) => {
+    const id = `section_${Date.now()}`;
+    set({ sections: [...get().sections, { sectionId: id, title, items: [] }] });
+  },
+  removeSection: (sectionId) => {
+    set({ sections: get().sections.filter(sec => sec.sectionId !== sectionId) });
+  },
+  addItemToSection: (sectionId, item) => {
+    set({
+      sections: get().sections.map(sec =>
+        sec.sectionId === sectionId ? { ...sec, items: [...sec.items, item] } : sec
+      ),
+    });
   },
 }));

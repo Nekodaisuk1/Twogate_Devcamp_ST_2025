@@ -7,11 +7,32 @@ import { repo } from "@/lib/data/NotesRepo";
 import { useUiStore } from "@/lib/stores/useUiStore";
 import { isoNowJP } from "@/lib/date";
 
-export default function Sidebar() {
-  const { search, graphResults, collapsed, setFocus, toggleSection } = useUiStore();
-  const { data: recent = [] } = useQuery({ queryKey: ["memos"], queryFn: () => repo.list() });
+import { usePathname, useRouter } from "next/navigation";
 
+export default function Sidebar() {
+
+  const { search, graphResults, collapsed, setFocus, toggleSection, sections, addSection } = useUiStore();
+  const { data: recent = [] } = useQuery({ queryKey: ["memos"], queryFn: () => repo.list() });
   const { iso: timeISO, label: timeLabel } = isoNowJP();
+  const pathname = usePathname();
+  const router = useRouter();
+
+  // セクション追加時に名前を入力して追加
+  const handleAddSection = () => {
+    const title = window.prompt("新しいセクション名を入力してください", "新しいセクション");
+    if (title && title.trim()) {
+      addSection(title.trim());
+    }
+  };
+
+  // ノートクリック時の挙動
+  const handleClickItem = (id: number) => {
+    setFocus(id);
+    // grid画面ならノート編集画面に遷移
+    if (pathname && pathname.startsWith("/notes/grid")) {
+      router.push(`/notes/${id}?from=grid`);
+    }
+  };
 
   return (
     <SidebarView
@@ -22,11 +43,11 @@ export default function Sidebar() {
       recentNotes={recent.map(n=>({ id: n.id, title: n.title }))}
       favorites={[]}
       showFavorites={false}
-      sections={[]}
+      sections={sections}
       collapsedMap={collapsed}
-      onClickItem={(id)=> setFocus(id)}
+      onClickItem={handleClickItem}
       onToggleSection={(key)=> toggleSection(key)}
-      onAddSection={()=>{/* later */}}
+      onAddSection={handleAddSection}
     />
   );
 }
