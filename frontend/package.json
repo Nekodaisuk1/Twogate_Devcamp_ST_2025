@@ -18,6 +18,7 @@
     "zustand": "^4.5.2"
   },
   "devDependencies": {
+    "@types/d3": "^7.4.3",
     "@types/node": "20.12.12",
     "@types/react": "18.2.66",
     "eslint": "8.57.0",
