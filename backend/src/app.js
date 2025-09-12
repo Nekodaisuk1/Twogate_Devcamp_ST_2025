@@ -26,7 +26,7 @@ db.exec(`
 		title TEXT NOT NULL,
 		created_date TEXT NOT NULL,
 		accessed_at TEXT NOT NULL,
-		favorite INTEGER not NULL DEFAULT 0,
+		favorite INTEGER not NULL,
 		content TEXT,
 		embedding FLOAT[512]
 	);
@@ -171,9 +171,9 @@ app.post("/api/memos", async (req, res) => {
 	// embeddingをnullにはできないため、初期化しておく
 	const info = db.prepare(`
 		INSERT 
-			INTO memos (title, content, created_date, accessed_at, embedding) 
-			VALUES (?, ?, ?, ?, ?)
-	`).run(title, content, created_date ?? jstDate(), now, ZERO_EMBED);
+			INTO memos (title, content, created_date, accessed_at, favorite, embedding) 
+			VALUES (?, ?, ?, ?, CAST(? AS INTEGER), ?)
+	`).run(title, content, created_date ?? jstDate(), now, 0, ZERO_EMBED);
 
 	const id = Number(info.lastInsertRowid);
 	await calcSimilarities(id, content);
@@ -192,7 +192,11 @@ app.patch ("/api/memos/:id", async(req, res) => {
 		// リクエスト箇所のみSQL文に追加
 		const fields = ["title", "content", "created_date", "favorite"];
 		fields.forEach(field => {
-			if(req.body[field] !== undefined) { // 空文字もOKにする
+			if (field === "favorite") {
+				// なぜか整数でも整数にならないので明示的に
+				updates.push(`favorite = CAST(:favorite AS INTEGER)`);
+				params.favorite = req.body.favorite;
+			} else {
 				updates.push(`${field} = :${field}`);
 				params[field] = req.body[field];
 			}
