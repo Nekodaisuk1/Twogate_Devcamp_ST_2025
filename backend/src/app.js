@@ -95,9 +95,8 @@ async function calcSimilarities(id, content) {
 }
 
 // listen開始
-app.listen(3000, () => {
-	console.log("Start server on port 3000.");
-});
+ const PORT = process.env.PORT || 3000;
+ app.listen(PORT, () => console.log(`server on ${PORT}`));
 
 // test
 app.get("/", (req, res) => {

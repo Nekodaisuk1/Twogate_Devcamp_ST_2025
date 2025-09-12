@@ -1,7 +1,7 @@
 {
-  "/_not-found/page": "app/_not-found/page.js",
-  "/notes/graph/page": "app/notes/graph/page.js",
-  "/notes/[id]/page": "app/notes/[id]/page.js",
+  "/page": "app/page.js",
   "/notes/new/page": "app/notes/new/page.js",
-  "/notes/grid/page": "app/notes/grid/page.js"
+  "/notes/[id]/page": "app/notes/[id]/page.js",
+  "/notes/grid/page": "app/notes/grid/page.js",
+  "/notes/graph/page": "app/notes/graph/page.js"
 }
