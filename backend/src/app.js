@@ -10,6 +10,9 @@ const model = await use.load();       // 一回だけロード
 
 const previewWords = 30;
 
+// default limit for graph links (can be overridden via env GRAPH_LIMIT or query param)
+const defaultGraphLimit = parseInt(process.env.GRAPH_LIMIT || '100', 10);
+
 const ZERO_EMBED = JSON.stringify(Array(512).fill(0));
 
 
@@ -278,19 +281,21 @@ app.get("/api/search", (req, res) => {
 
 // graph データを全て
 app.get("/api/graph", (req, res) => {
-	try {
-		// memo_similaritiesを全て出力
-		// 多過ぎたら後で閾値を設ける
-		const links = db.prepare(`
-			SELECT 
-				memo_id_1 AS source,
-				memo_id_2 AS target,
-				similarity_score AS value
-			FROM memo_similarities
-			-- WHERE similarity_score >= 0.7
-			ORDER by similarity_score DESC
-			LIMIT 5
-		`).all()
+        try {
+                // memo_similaritiesを全て出力
+                // 多過ぎたら後で閾値を設ける
+                const limitParam = parseInt(req.query.limit, 10);
+                const limit = Number.isFinite(limitParam) ? limitParam : defaultGraphLimit;
+                const links = db.prepare(`
+                        SELECT
+                                memo_id_1 AS source,
+                                memo_id_2 AS target,
+                                similarity_score AS value
+                        FROM memo_similarities
+                        -- WHERE similarity_score >= 0.7
+                        ORDER by similarity_score DESC
+                        ${limit > 0 ? 'LIMIT :limit' : ''}
+                `).all(limit > 0 ? { limit } : {})
 
 		// memo_idの取得
 		const memoIds = new Set();
