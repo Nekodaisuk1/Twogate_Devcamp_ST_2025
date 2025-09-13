@@ -7,6 +7,10 @@ import type { GraphPayload } from "@/lib/types";
 import { useUiStore } from "@/lib/stores/useUiStore";
 import { useRouter } from "next/navigation";
 
+const NODE_W = 140;
+const NODE_H = 60;
+const NODE_R = Math.hypot(NODE_W / 2, NODE_H / 2);
+
 /**
  * 高速 Canvas グラフ（d3-force）
  * - ホイール：ズーム、ドラッグ：パン
@@ -130,11 +134,13 @@ export default function GraphCanvas({
 
   // シミュレーション
   useEffect(() => {
+    const R = NODE_R + 8; // margin
     const sim = d3
       .forceSimulation(nodes as any)
       .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(250).strength(0.4))
       .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(0, 0))
+      .force("collide", d3.forceCollide(R))
       .alpha(1)
       .alphaDecay(0.1); // 早めに安定化
 
@@ -166,6 +172,7 @@ export default function GraphCanvas({
     return () => {
       d3.select(canvas).on(".zoom", null);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ノードドラッグ（固定）
@@ -175,7 +182,7 @@ export default function GraphCanvas({
 
     function pickNode(px: number, py: number) {
       const [gx, gy] = transformRef.current.invert([px, py]);
-      const r = 14;
+      const r = NODE_R;
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i] as any;
         const dx = gx - (n.x ?? 0);
@@ -233,7 +240,7 @@ export default function GraphCanvas({
 
     function pick(px: number, py: number) {
       const [gx, gy] = transformRef.current.invert([px, py]);
-      const r = 14;
+      const r = NODE_R;
       for (let i = nodes.length - 1; i >= 0; i--) {
         const n = nodes[i] as any;
         const dx = gx - (n.x ?? 0);
@@ -352,7 +359,7 @@ export default function GraphCanvas({
       const isSnap = snapNodeIdRef.current === n.id;
       const note = noteMap.get(n.id) as Note | undefined;
       // NoteCard風デザイン
-      const w = 140, h = 60, r = 10, pad = 8;
+      const w = NODE_W, h = NODE_H, r = 10, pad = 8;
       const x = n.x ?? 0, y = n.y ?? 0;
       // 背景
       ctx.save();
