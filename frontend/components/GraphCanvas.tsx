@@ -132,7 +132,7 @@ export default function GraphCanvas({
   useEffect(() => {
     const sim = d3
       .forceSimulation(nodes as any)
-      .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(150).strength(0.4))
+      .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(250).strength(0.4))
       .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(0, 0))
       .alpha(1)
