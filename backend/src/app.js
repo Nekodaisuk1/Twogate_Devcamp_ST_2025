@@ -9,6 +9,8 @@ const app = express();
 const model = await use.load();       // 一回だけロード
 
 const previewWords = 30;
+const SIMILARITY_THRESHOLD = parseFloat(process.env.SIMILARITY_THRESHOLD ?? "0.5");
+const SIMILARITY_LIMIT = parseInt(process.env.SIMILARITY_LIMIT ?? "10", 10);
 
 const ZERO_EMBED = JSON.stringify(Array(512).fill(0));
 
@@ -80,20 +82,21 @@ function deleteSimilaritiesFor(id) {
 
 // 新しいメモと既存のすべてのメモとの距離を計算、memo_similaritiesに保存
 function insertSimilaritiesFor(id, json) {
-	db.prepare(`
-		INSERT INTO memo_similarities (memo_id_1, memo_id_2, similarity_score, created_time)
-		SELECT
-			MIN(:id, memos.id),
-			MAX(:id, memos.id),
-			1.0 - vec_distance_cosine(memos.embedding, :json) AS similarity_score, -- コサイン類似度として保存
-			strftime('%Y-%m-%dT%H:%M:%S', 'now') AS created_time -- 日付と時刻の区切りがT
-		FROM memos
-		WHERE
-			memos.id != :id
-			AND memos.embedding IS NOT NULL
-			AND (1.0 - vec_distance_cosine(memos.embedding, :json)) >= 0.6
-		LIMIT 5
-	`).run({ id, json })
+        db.prepare(`
+                INSERT INTO memo_similarities (memo_id_1, memo_id_2, similarity_score, created_time)
+                SELECT
+                        MIN(:id, memos.id),
+                        MAX(:id, memos.id),
+                        1.0 - vec_distance_cosine(memos.embedding, :json) AS similarity_score, -- コサイン類似度として保存
+                        strftime('%Y-%m-%dT%H:%M:%S', 'now') AS created_time -- 日付と時刻の区切りがT
+                FROM memos
+                WHERE
+                        memos.id != :id
+                        AND memos.embedding IS NOT NULL
+                        AND (1.0 - vec_distance_cosine(memos.embedding, :json)) >= :threshold
+                ORDER BY similarity_score DESC
+                LIMIT :limit
+        `).run({ id, json, threshold: SIMILARITY_THRESHOLD, limit: SIMILARITY_LIMIT })
 }
 
 const jstDate = (d = new Date()) =>
