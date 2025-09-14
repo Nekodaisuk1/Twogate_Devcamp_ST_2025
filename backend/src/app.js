@@ -129,9 +129,10 @@ async function calcSimilarities(id, content) {
         tensor.dispose();
 
         // 段落ごとのベクトルを保存
-        db.prepare(`DELETE FROM memo_paragraphs WHERE memo_id = ?`).run(id);
+        const memoId = Number.parseInt(id, 10);
+        db.prepare(`DELETE FROM memo_paragraphs WHERE memo_id = ?`).run(memoId);
         const insertPar = db.prepare(`INSERT INTO memo_paragraphs (memo_id, paragraph_index, embedding) VALUES (?, ?, ?)`);
-        vecs.forEach((v, i) => insertPar.run(id, i, JSON.stringify(v)));
+        vecs.forEach((v, i) => insertPar.run(memoId, i, JSON.stringify(v)));
 
         // メモ全体のベクトルは段落ベクトルの平均とする
         const avgVec = vecs[0].map((_, dim) => vecs.reduce((sum, v) => sum + v[dim], 0) / vecs.length);
