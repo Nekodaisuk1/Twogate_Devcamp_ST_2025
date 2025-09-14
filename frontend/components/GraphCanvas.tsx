@@ -10,6 +10,9 @@ import { useRouter } from "next/navigation";
 const NODE_W = 140;
 const NODE_H = 60;
 const NODE_R = Math.hypot(NODE_W / 2, NODE_H / 2);
+const SIMILARITY_THRESHOLD = parseFloat(
+  process.env.NEXT_PUBLIC_SIMILARITY_THRESHOLD ?? "0.5"
+);
 
 /**
  * 高速 Canvas グラフ（d3-force）
@@ -137,7 +140,18 @@ export default function GraphCanvas({
     const R = NODE_R + 8; // margin
     const sim = d3
       .forceSimulation(nodes as any)
-      .force("link", d3.forceLink(links as any).id((d: any) => d.id).distance(250).strength(0.4))
+      .force(
+        "link",
+        d3
+          .forceLink(links as any)
+          .id((d: any) => d.id)
+          .distance((d: any) => {
+            const t = SIMILARITY_THRESHOLD;
+            const s = Math.max(Math.min(d.score ?? t, 1), t);
+            return 200 + ((1 - s) / (1 - t)) * 400;
+          })
+          .strength(0.4)
+      )
       .force("charge", d3.forceManyBody().strength(-120))
       .force("center", d3.forceCenter(0, 0))
       .force("collide", d3.forceCollide(R))
