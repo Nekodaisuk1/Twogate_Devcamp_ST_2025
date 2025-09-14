@@ -66,10 +66,10 @@ db.exec(`
                 PRIMARY key (memo_id_1, memo_id_2)
         );
         CREATE VIRTUAL TABLE IF NOT EXISTS memo_paragraphs USING vec0(
+                id INTEGER PRIMARY KEY,
                 memo_id INTEGER NOT NULL,
                 paragraph_index INTEGER NOT NULL,
-                embedding FLOAT[512],
-                PRIMARY KEY (memo_id, paragraph_index)
+                embedding FLOAT[512]
         );
 `)
 
