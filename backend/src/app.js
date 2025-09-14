@@ -49,22 +49,28 @@ const db = new Database("./data/app.db"); // backendからみて
 sqliteVec.load(db);
 
 db.exec(`
-	CREATE VIRTUAL TABLE IF NOT EXISTS memos USING vec0(
-		id INTEGER PRIMARY KEY,
-		title TEXT NOT NULL,
-		created_date TEXT NOT NULL,
-		accessed_at TEXT NOT NULL,
-		content TEXT,
-		embedding FLOAT[512]
-	);
-	create table if not exists memo_similarities (
-		memo_id_1 INTEGER NOT NULL,
-		memo_id_2 INTEGER NOT NULL,
-		similarity_score real NOT NULL,
-		created_time text NOT NULL,
-		CHECK (memo_id_1 < memo_id_2),
-		PRIMARY key (memo_id_1, memo_id_2)
-	);
+        CREATE VIRTUAL TABLE IF NOT EXISTS memos USING vec0(
+                id INTEGER PRIMARY KEY,
+                title TEXT NOT NULL,
+                created_date TEXT NOT NULL,
+                accessed_at TEXT NOT NULL,
+                content TEXT,
+                embedding FLOAT[512]
+        );
+        create table if not exists memo_similarities (
+                memo_id_1 INTEGER NOT NULL,
+                memo_id_2 INTEGER NOT NULL,
+                similarity_score real NOT NULL,
+                created_time text NOT NULL,
+                CHECK (memo_id_1 < memo_id_2),
+                PRIMARY key (memo_id_1, memo_id_2)
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS memo_paragraphs USING vec0(
+                memo_id INTEGER NOT NULL,
+                paragraph_index INTEGER NOT NULL,
+                embedding FLOAT[512],
+                PRIMARY KEY (memo_id, paragraph_index)
+        );
 `)
 
 // memosにベクトルを保存
@@ -84,22 +90,22 @@ function deleteSimilaritiesFor(id) {
 }
 
 // 新しいメモと既存のすべてのメモとの距離を計算、memo_similaritiesに保存
-function insertSimilaritiesFor(id, json) {
+function insertSimilaritiesFor(id) {
         db.prepare(`
                 INSERT INTO memo_similarities (memo_id_1, memo_id_2, similarity_score, created_time)
                 SELECT
-                        MIN(:id, memos.id),
-                        MAX(:id, memos.id),
-                        1.0 - vec_distance_cosine(memos.embedding, :json) AS similarity_score, -- コサイン類似度として保存
-                        strftime('%Y-%m-%dT%H:%M:%S', 'now') AS created_time -- 日付と時刻の区切りがT
-                FROM memos
-                WHERE
-                        memos.id != :id
-                        AND memos.embedding IS NOT NULL
-                        AND (1.0 - vec_distance_cosine(memos.embedding, :json)) >= :threshold
+                        MIN(:id, mp2.memo_id) AS memo_id_1,
+                        MAX(:id, mp2.memo_id) AS memo_id_2,
+                        MAX(1.0 - vec_distance_cosine(mp1.embedding, mp2.embedding)) AS similarity_score,
+                        strftime('%Y-%m-%dT%H:%M:%S', 'now') AS created_time
+                FROM memo_paragraphs mp1
+                JOIN memo_paragraphs mp2 ON mp2.memo_id != :id
+                WHERE mp1.memo_id = :id
+                GROUP BY mp2.memo_id
+                HAVING similarity_score >= :threshold
                 ORDER BY similarity_score DESC
                 LIMIT :limit
-        `).run({ id, json, threshold: SIMILARITY_THRESHOLD, limit: SIMILARITY_LIMIT })
+        `).run({ id, threshold: SIMILARITY_THRESHOLD, limit: SIMILARITY_LIMIT })
 }
 
 const jstDate = (d = new Date()) =>
@@ -112,15 +118,28 @@ const jstDate = (d = new Date()) =>
 
 // 新規作成・更新時に計算する
 async function calcSimilarities(id, content) {
-	// メモのベクトル化
-	const newMemoVector = await model.embed([content]);
-	const vec = (await newMemoVector.array())[0]; // JSON化できるように配列に直す
-	newMemoVector.dispose(); // メモリ解放
-	const jsonVec = JSON.stringify(vec);
+        // 段落に分割し、それぞれをベクトル化
+        const paragraphs = content
+                .split(/\n{2,}/)
+                .map(p => p.trim())
+                .filter(p => p.length > 0);
 
-	updateEmbedding(id, jsonVec); 	
-	deleteSimilaritiesFor(id); 
-	insertSimilaritiesFor(id, jsonVec);
+        const tensor = await model.embed(paragraphs);
+        const vecs = await tensor.array();
+        tensor.dispose();
+
+        // 段落ごとのベクトルを保存
+        db.prepare(`DELETE FROM memo_paragraphs WHERE memo_id = ?`).run(id);
+        const insertPar = db.prepare(`INSERT INTO memo_paragraphs (memo_id, paragraph_index, embedding) VALUES (?, ?, ?)`);
+        vecs.forEach((v, i) => insertPar.run(id, i, JSON.stringify(v)));
+
+        // メモ全体のベクトルは段落ベクトルの平均とする
+        const avgVec = vecs[0].map((_, dim) => vecs.reduce((sum, v) => sum + v[dim], 0) / vecs.length);
+        const jsonVec = JSON.stringify(avgVec);
+
+        updateEmbedding(id, jsonVec);
+        deleteSimilaritiesFor(id);
+        insertSimilaritiesFor(id);
 }
 
 // listen開始
@@ -236,16 +255,18 @@ app.delete("/api/memos/:id", (req, res) => {
 	const id = Number(req.params.id);
 	if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: "bad id"});
 
-	const delMemo = db.transaction((memoId) => {
-		// memo_similaritiesの該当部分を削除
-		db.prepare(`
-			DELETE FROM memo_similarities
-			WHERE memo_id_1 = :id OR memo_id_2 = :id
-		`).run({ id: memoId });
-		// memosのidを削除
-		const r = db.prepare("DELETE FROM memos WHERE id = :id").run({ id: memoId });
-		return r.changes;
-	});
+        const delMemo = db.transaction((memoId) => {
+                // memo_similaritiesの該当部分を削除
+                db.prepare(`
+                        DELETE FROM memo_similarities
+                        WHERE memo_id_1 = :id OR memo_id_2 = :id
+                `).run({ id: memoId });
+                // 段落ベクトルの削除
+                db.prepare(`DELETE FROM memo_paragraphs WHERE memo_id = :id`).run({ id: memoId });
+                // memosのidを削除
+                const r = db.prepare("DELETE FROM memos WHERE id = :id").run({ id: memoId });
+                return r.changes;
+        });
 
 	const changes =	delMemo(id);
 	if (changes === 0) return res.status(404).json({ error: "memo not found" });
